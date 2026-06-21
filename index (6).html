@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Tetris</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0d0d1a;
+      color: #e0e0e0;
+      font-family: 'Courier New', Courier, monospace;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100dvh;
+      overflow: hidden;
+    }
+
+    /* ===== LOADING SCREEN ===== */
+    #loading-screen {
+      position: fixed;
+      inset: 0;
+      background: #0d0d1a;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+      gap: 28px;
+    }
+    .loading-logo {
+      font-size: clamp(36px, 10vw, 64px);
+      font-weight: 900;
+      letter-spacing: 10px;
+      background: linear-gradient(135deg, #00f2ff, #a855f7, #ff6b6b);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.7; transform: scale(0.97); }
+    }
+    .loading-subtitle {
+      font-size: 12px;
+      letter-spacing: 4px;
+      color: #555;
+      text-transform: uppercase;
+    }
+    .progress-wrap {
+      width: 240px;
+      height: 3px;
+      background: #1e1e2e;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #00f2ff, #a855f7);
+      border-radius: 4px;
+      transition: width 0.1s linear;
+    }
+    .loading-tip {
+      font-size: 11px;
+      color: #444;
+      text-align: center;
+      letter-spacing: 1px;
+    }
+
+    /* ===== MENU SCREEN ===== */
+    #menu-screen {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      text-align: center;
+      padding: 20px;
+    }
+    .menu-title {
+      font-size: clamp(36px, 12vw, 56px);
+      font-weight: 900;
+      letter-spacing: 10px;
+      background: linear-gradient(135deg, #00f2ff, #a855f7, #ff6b6b);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .best-score-box {
+      background: #1a1a2e;
+      border: 1px solid #2a2a4a;
+      border-radius: 12px;
+      padding: 16px 40px;
+    }
+    .best-score-label {
+      font-size: 10px;
+      letter-spacing: 3px;
+      color: #666;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .best-score-value {
+      font-size: 36px;
+      font-weight: 700;
+      color: #a855f7;
+    }
+    .controls-hint {
+      font-size: 11px;
+      color: #444;
+      line-height: 2;
+      letter-spacing: 1px;
+    }
+    .controls-hint span { color: #00f2ff; }
+    .btn-start {
+      background: linear-gradient(135deg, #a855f7, #6366f1);
+      color: #fff;
+      border: none;
+      padding: 13px 44px;
+      font-size: 15px;
+      font-family: inherit;
+      letter-spacing: 3px;
+      border-radius: 8px;
+      cursor: pointer;
+      text-transform: uppercase;
+      font-weight: 700;
+      transition: opacity 0.2s, transform 0.15s;
+    }
+    .btn-start:hover  { opacity: 0.85; transform: scale(1.03); }
+    .btn-start:active { transform: scale(0.97); }
+
+    /* ===== GAME SCREEN ===== */
+    #game-screen {
+      display: none;
+      flex-direction: row;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 10px;
+      padding: 10px;
+      width: 100%;
+      height: 100dvh;
+    }
+
+    /* ---- LEFT PANEL (Score, Best, Level, Lines) ---- */
+    .panel-left {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: var(--panel-w, 80px);
+      flex-shrink: 0;
+      padding-top: 4px;
+    }
+    .stat-box {
+      background: #161626;
+      border: 1px solid #252540;
+      border-radius: 8px;
+      padding: 8px 6px;
+      text-align: center;
+    }
+    .stat-label {
+      font-size: 8px;
+      letter-spacing: 2px;
+      color: #444;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .stat-value {
+      font-size: 18px;
+      font-weight: 700;
+      color: #d0d0d0;
+      line-height: 1;
+      word-break: break-all;
+    }
+    .stat-value.best { color: #a855f7; font-size: 15px; }
+
+    /* ---- BOARD ---- */
+    .canvas-wrap {
+      position: relative;
+      flex-shrink: 0;
+    }
+    canvas#board {
+      display: block;
+      border: 1px solid #252540;
+      border-radius: 4px;
+      background: #0e0e1e;
+      touch-action: none;
+    }
+
+    /* Touch hint */
+    #touch-hint {
+      position: absolute;
+      bottom: 5px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 8px;
+      color: rgba(255,255,255,0.14);
+      letter-spacing: 0.8px;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    /* Game Over overlay */
+    #gameover-overlay {
+      display: none;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(10, 10, 22, 0.93);
+      border: 1px solid #a855f7;
+      border-radius: 10px;
+      padding: 22px 32px;
+      text-align: center;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    #gameover-overlay h2 {
+      font-size: 22px;
+      color: #ff6b6b;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+    #gameover-overlay p {
+      margin-top: 6px;
+      font-size: 10px;
+      color: #555;
+      letter-spacing: 2px;
+    }
+
+    /* ---- RIGHT PANEL (Next, Restart, Keys) ---- */
+    .panel-right {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: var(--panel-w, 80px);
+      flex-shrink: 0;
+      padding-top: 4px;
+    }
+    .next-box {
+      background: #161626;
+      border: 1px solid #252540;
+      border-radius: 8px;
+      padding: 8px 6px;
+      text-align: center;
+    }
+    .next-label {
+      font-size: 8px;
+      letter-spacing: 2px;
+      color: #444;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    canvas#next-canvas {
+      display: block;
+      margin: 0 auto;
+      background: transparent;
+    }
+    .btn-restart {
+      background: #161626;
+      color: #aaa;
+      border: 1px solid #252540;
+      padding: 9px 0;
+      width: 100%;
+      font-size: 10px;
+      font-family: inherit;
+      letter-spacing: 1.5px;
+      border-radius: 8px;
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: background 0.2s, color 0.2s;
+    }
+    .btn-restart:hover  { background: #1e1e36; color: #e0e0e0; }
+    .btn-restart:active { background: #252545; }
+
+    .keys-box {
+      background: #161626;
+      border: 1px solid #252540;
+      border-radius: 8px;
+      padding: 8px 6px;
+    }
+    .keys-box-label {
+      font-size: 8px;
+      letter-spacing: 2px;
+      color: #444;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .keys-list {
+      font-size: 9px;
+      color: #383858;
+      line-height: 1.9;
+      letter-spacing: 0.3px;
+    }
+    .keys-list b { color: #00c8d8; }
+
+    /* ===== ORYNTH BADGE ===== */
+    #orynth-badge {
+      position: fixed;
+      bottom: 10px;
+      right: 10px;
+      z-index: 999;
+      opacity: 0.72;
+      transition: opacity 0.2s;
+      /* Scale down badge on small screens */
+      transform-origin: bottom right;
+      transform: scale(0.65);
+    }
+    #orynth-badge:hover { opacity: 1; }
+
+    @media (min-width: 600px) {
+      #orynth-badge { transform: scale(0.85); }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ===== ORYNTH BADGE ===== -->
+<a id="orynth-badge" href="https://orynth.dev/projects/asteroid-miner" target="_blank" rel="noopener">
+  <img src="https://orynth.dev/api/badge/asteroid-miner?theme=light&style=default" alt="Featured on Orynth" width="260" height="80" />
+</a>
+
+<!-- ===== LOADING SCREEN ===== -->
+<div id="loading-screen">
+  <div class="loading-logo">TETRIS</div>
+  <div class="loading-subtitle">Classic Edition</div>
+  <div class="progress-wrap">
+    <div class="progress-bar" id="progress-bar"></div>
+  </div>
+  <div class="loading-tip" id="loading-tip">Memuat tetromino...</div>
+</div>
+
+<!-- ===== MENU SCREEN ===== -->
+<div id="menu-screen">
+  <div class="menu-title">TETRIS</div>
+  <div class="best-score-box">
+    <div class="best-score-label">Best Score</div>
+    <div class="best-score-value" id="menu-best">0</div>
+  </div>
+  <div class="controls-hint">
+    <span>← →</span> Geser &nbsp;|&nbsp; <span>↑</span> Rotasi &nbsp;|&nbsp; <span>↓</span> Drop<br>
+    <span>Space</span> Hard drop &nbsp;|&nbsp; <span>P</span> Pause<br>
+    <span>👆 TAP</span> Rotasi &nbsp;|&nbsp; <span>👉 GESER</span> Kiri/Kanan<br>
+    <span>👇 TAHAN</span> Turun cepat
+  </div>
+  <button class="btn-start" id="btn-menu-start">MULAI MAIN</button>
+</div>
+
+<!-- ===== GAME SCREEN ===== -->
+<div id="game-screen">
+
+  <!-- Left panel: stats -->
+  <div class="panel-left">
+    <div class="stat-box">
+      <div class="stat-label">Score</div>
+      <div class="stat-value" id="score-display">0</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Best</div>
+      <div class="stat-value best" id="best-display">0</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Level</div>
+      <div class="stat-value" id="level-display">1</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Lines</div>
+      <div class="stat-value" id="lines-display">0</div>
+    </div>
+  </div>
+
+  <!-- Board -->
+  <div class="canvas-wrap">
+    <canvas id="board"></canvas>
+    <div id="gameover-overlay">
+      <h2>Game Over</h2>
+      <p>Tap Restart to play again</p>
+    </div>
+    <div id="touch-hint">TAP rotasi · GESER kiri/kanan · TAHAN ↓ turun cepat</div>
+  </div>
+
+  <!-- Right panel: next + restart + guide -->
+  <div class="panel-right">
+    <div class="next-box">
+      <div class="next-label">Next</div>
+      <canvas id="next-canvas"></canvas>
+    </div>
+    <button class="btn-restart" id="btn-restart">↺ Restart</button>
+    <div class="keys-box">
+      <div class="keys-box-label">Controls</div>
+      <div class="keys-list">
+        <b>↑</b> Rotasi<br>
+        <b>← →</b> Geser<br>
+        <b>↓</b> Drop<br>
+        <b>Space</b> Hard<br>
+        <b>P</b> Pause<br>
+        <b>👆</b> Tap=rotasi<br>
+        <b>👉</b> Geser<br>
+        <b>👇</b> Cepat
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// =============================================
+//  TETRIS — Vanilla JS + HTML5 Canvas
+// =============================================
+
+const COLS = 10;
+const ROWS = 20;
+const LINE_POINTS = [0, 100, 300, 500, 800];
+
+// ---- Hitung BLOCK_SIZE dinamis berdasarkan viewport ----
+// Sisakan ruang untuk padding (20px atas-bawah) + panel kiri/kanan (~180px) + gap
+function calcBlockSize() {
+  const vh       = window.innerHeight;
+  const vw       = window.innerWidth;
+  const PANEL_W  = Math.max(70, Math.min(95, vw * 0.16));  // lebar tiap panel ~16% viewport
+  const GAP      = 10;
+  const PADDING  = 20;
+  const maxByH   = Math.floor((vh - PADDING * 2) / ROWS);
+  const maxByW   = Math.floor((vw - PANEL_W * 2 - GAP * 4 - PADDING * 2) / COLS);
+  return Math.max(14, Math.min(30, maxByH, maxByW));
+}
+
+let BS = calcBlockSize(); // BLOCK_SIZE aktif
+
+// ---- Definisi 7 tetromino standar ----
+const TETROMINOES = {
+  I: { color: '#00f2ff', shape: [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]] },
+  J: { color: '#4169e1', shape: [[1,0,0],[1,1,1],[0,0,0]] },
+  L: { color: '#ff8c00', shape: [[0,0,1],[1,1,1],[0,0,0]] },
+  O: { color: '#ffd700', shape: [[1,1],[1,1]] },
+  S: { color: '#32cd32', shape: [[0,1,1],[1,1,0],[0,0,0]] },
+  T: { color: '#a855f7', shape: [[0,1,0],[1,1,1],[0,0,0]] },
+  Z: { color: '#ff6b6b', shape: [[1,1,0],[0,1,1],[0,0,0]] }
+};
+const TETROMINO_KEYS = Object.keys(TETROMINOES);
+
+// ---- DOM refs ----
+const boardCanvas = document.getElementById('board');
+const ctx         = boardCanvas.getContext('2d');
+const nextCanvas  = document.getElementById('next-canvas');
+const nCtx        = nextCanvas.getContext('2d');
+const scoreEl     = document.getElementById('score-display');
+const bestEl      = document.getElementById('best-display');
+const levelEl     = document.getElementById('level-display');
+const linesEl     = document.getElementById('lines-display');
+const menuBestEl  = document.getElementById('menu-best');
+const gameoverEl  = document.getElementById('gameover-overlay');
+
+/** Terapkan ukuran canvas dan CSS variable panel sesuai BS terkini. */
+function applyCanvasSize() {
+  boardCanvas.width  = COLS * BS;
+  boardCanvas.height = ROWS * BS;
+
+  const nextBS = Math.min(BS, 22);          // preview next lebih kecil
+  nextCanvas.width  = 4 * nextBS;
+  nextCanvas.height = 4 * nextBS;
+  nextCanvas.dataset.bs = nextBS;
+
+  // Update CSS variable lebar panel agar sesuai
+  const PANEL_W = Math.max(70, Math.min(95, window.innerWidth * 0.16));
+  document.getElementById('game-screen').style.setProperty('--panel-w', PANEL_W + 'px');
+  document.querySelector('.panel-left').style.width  = PANEL_W + 'px';
+  document.querySelector('.panel-right').style.width = PANEL_W + 'px';
+}
+applyCanvasSize();
+
+// =============================================
+//  STATE GAME
+// =============================================
+let board        = [];
+let current      = null;
+let next         = null;
+let score        = 0;
+let bestScore    = parseInt(localStorage.getItem('tetris_best') || '0');
+let level        = 1;
+let lines        = 0;
+let gameRunning  = false;
+let gamePaused   = false;
+let dropTimer    = null;
+let dropInterval = 800;
+
+function createBoard() {
+  board = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+}
+
+function getDropInterval() {
+  return Math.max(100, 800 - (level - 1) * 70);
+}
+
+// =============================================
+//  TETROMINO
+// =============================================
+function createPiece(key) {
+  const def = TETROMINOES[key];
+  return {
+    key,
+    color : def.color,
+    shape : def.shape.map(r => [...r]),
+    x     : Math.floor(COLS / 2) - Math.floor(def.shape[0].length / 2),
+    y     : 0
+  };
+}
+
+function randomPiece() {
+  return createPiece(TETROMINO_KEYS[Math.floor(Math.random() * TETROMINO_KEYS.length)]);
+}
+
+// =============================================
+//  ROTASI + WALL KICK
+// =============================================
+function rotateMatrix(matrix) {
+  const N = matrix.length, M = matrix[0].length;
+  const res = Array.from({ length: M }, () => Array(N).fill(0));
+  for (let r = 0; r < N; r++)
+    for (let c = 0; c < M; c++)
+      res[c][N - 1 - r] = matrix[r][c];
+  return res;
+}
+
+function rotatePiece() {
+  const rotated = rotateMatrix(current.shape);
+  for (const kick of [0, 1, -1, 2, -2]) {
+    if (!collides(rotated, current.x + kick, current.y)) {
+      current.shape = rotated;
+      current.x    += kick;
+      return;
+    }
+  }
+}
+
+// =============================================
+//  COLLISION
+// =============================================
+function collides(shape, px, py) {
+  for (let r = 0; r < shape.length; r++) {
+    for (let c = 0; c < shape[r].length; c++) {
+      if (!shape[r][c]) continue;
+      const nx = px + c, ny = py + r;
+      if (nx < 0 || nx >= COLS)        return true;
+      if (ny >= ROWS)                  return true;
+      if (ny >= 0 && board[ny][nx])    return true;
+    }
+  }
+  return false;
+}
+
+// =============================================
+//  LOCK
+// =============================================
+function lockPiece() {
+  for (let r = 0; r < current.shape.length; r++) {
+    for (let c = 0; c < current.shape[r].length; c++) {
+      if (!current.shape[r][c]) continue;
+      const ny = current.y + r, nx = current.x + c;
+      if (ny < 0) { triggerGameOver(); return; }
+      board[ny][nx] = current.color;
+    }
+  }
+  clearLines();
+  spawnNext();
+}
+
+// =============================================
+//  LINE CLEAR
+// =============================================
+function clearLines() {
+  let cleared = 0;
+  for (let r = ROWS - 1; r >= 0; r--) {
+    if (board[r].every(cell => cell !== null)) {
+      board.splice(r, 1);
+      board.unshift(Array(COLS).fill(null));
+      cleared++; r++;
+    }
+  }
+  if (cleared > 0) {
+    lines += cleared;
+    score += LINE_POINTS[cleared] * level;
+    level  = Math.floor(lines / 10) + 1;
+    dropInterval = getDropInterval();
+    if (score > bestScore) {
+      bestScore = score;
+      localStorage.setItem('tetris_best', bestScore);
+    }
+    updateUI();
+    restartDropTimer();
+  }
+}
+
+// =============================================
+//  SPAWN
+// =============================================
+function spawnNext() {
+  current = next;
+  next    = randomPiece();
+  if (collides(current.shape, current.x, current.y)) triggerGameOver();
+  drawNext();
+}
+
+// =============================================
+//  DROP TIMER
+// =============================================
+function startDropTimer()   { stopDropTimer(); dropTimer = setInterval(softDrop, dropInterval); }
+function stopDropTimer()    { if (dropTimer) { clearInterval(dropTimer); dropTimer = null; } }
+function restartDropTimer() { stopDropTimer(); startDropTimer(); }
+
+function softDrop() {
+  if (!gameRunning || gamePaused) return;
+  if (!collides(current.shape, current.x, current.y + 1)) current.y++;
+  else lockPiece();
+  render();
+}
+
+// =============================================
+//  HARD DROP
+// =============================================
+function hardDrop() {
+  while (!collides(current.shape, current.x, current.y + 1)) { current.y++; score += 2; }
+  lockPiece(); render(); updateUI();
+}
+
+// =============================================
+//  KEYBOARD
+// =============================================
+document.addEventListener('keydown', (e) => {
+  if (!gameRunning) return;
+  switch (e.key) {
+    case 'ArrowLeft':
+      e.preventDefault();
+      if (!gamePaused && !collides(current.shape, current.x - 1, current.y)) { current.x--; render(); }
+      break;
+    case 'ArrowRight':
+      e.preventDefault();
+      if (!gamePaused && !collides(current.shape, current.x + 1, current.y)) { current.x++; render(); }
+      break;
+    case 'ArrowDown':
+      e.preventDefault();
+      if (!gamePaused) { softDrop(); restartDropTimer(); }
+      break;
+    case 'ArrowUp':
+      e.preventDefault();
+      if (!gamePaused) { rotatePiece(); render(); }
+      break;
+    case ' ':
+      e.preventDefault();
+      if (!gamePaused) hardDrop();
+      break;
+    case 'p': case 'P':
+      togglePause();
+      break;
+  }
+});
+
+// =============================================
+//  TOUCH CONTROLS
+// =============================================
+(function setupTouch() {
+  const canvas = boardCanvas;
+  const SWIPE_X_STEP   = 18;
+  const SWIPE_DOWN_MIN = 22;
+  const TAP_MAX_DIST   = 12;
+  const TAP_MAX_MS     = 250;
+
+  let touchStartX = 0, touchStartY = 0, touchLastX = 0;
+  let touchStartMs = 0, fastDropTimer = null, isSwiping = false;
+
+  function startFastDrop() {
+    if (fastDropTimer) return;
+    fastDropTimer = setInterval(() => {
+      if (!gameRunning || gamePaused) return;
+      softDrop(); restartDropTimer();
+    }, 60);
+  }
+  function stopFastDrop() {
+    if (fastDropTimer) { clearInterval(fastDropTimer); fastDropTimer = null; }
+  }
+
+  canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    if (!gameRunning || gamePaused) return;
+    const t = e.changedTouches[0];
+    touchStartX = t.clientX; touchStartY = t.clientY;
+    touchLastX  = t.clientX; touchStartMs = Date.now();
+    isSwiping   = false;
+  }, { passive: false });
+
+  canvas.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    if (!gameRunning || gamePaused) return;
+    const t      = e.changedTouches[0];
+    const dx     = t.clientX - touchLastX;
+    const totalY = t.clientY - touchStartY;
+    const totalX = Math.abs(t.clientX - touchStartX);
+
+    if (Math.abs(dx) >= SWIPE_X_STEP) {
+      isSwiping = true;
+      stopFastDrop();
+      if (dx < 0 && !collides(current.shape, current.x - 1, current.y)) { current.x--; render(); }
+      else if (dx > 0 && !collides(current.shape, current.x + 1, current.y)) { current.x++; render(); }
+      touchLastX = t.clientX;
+    }
+
+    if (totalY > SWIPE_DOWN_MIN && totalY > totalX * 1.5) {
+      isSwiping = true;
+      startFastDrop();
+    }
+  }, { passive: false });
+
+  canvas.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    stopFastDrop();
+    if (!gameRunning || gamePaused) return;
+    const t    = e.changedTouches[0];
+    const dist = Math.hypot(t.clientX - touchStartX, t.clientY - touchStartY);
+    const dur  = Date.now() - touchStartMs;
+    if (dist < TAP_MAX_DIST && dur < TAP_MAX_MS && !isSwiping) {
+      rotatePiece(); render();
+    }
+  }, { passive: false });
+
+  canvas.addEventListener('touchcancel', () => stopFastDrop(), { passive: false });
+})();
+
+// =============================================
+//  PAUSE
+// =============================================
+function togglePause() {
+  gamePaused = !gamePaused;
+  if (gamePaused) stopDropTimer();
+  else { startDropTimer(); render(); }
+}
+
+// =============================================
+//  GAME OVER
+// =============================================
+function triggerGameOver() {
+  gameRunning = false;
+  stopDropTimer();
+  gameoverEl.style.display = 'block';
+  updateUI();
+}
+
+// =============================================
+//  RENDER
+// =============================================
+function drawBlock(context, x, y, color, size) {
+  const p = 1, r = 3;
+  const bx = x * size + p, by = y * size + p, bs = size - p * 2;
+  context.beginPath();
+  context.roundRect(bx, by, bs, bs, r);
+  context.fillStyle = color;
+  context.fill();
+  context.beginPath();
+  context.roundRect(bx, by, bs, bs, r);
+  context.strokeStyle = 'rgba(255,255,255,0.22)';
+  context.lineWidth   = 1;
+  context.stroke();
+}
+
+function getGhostY() {
+  let ghostY = current.y;
+  while (!collides(current.shape, current.x, ghostY + 1)) ghostY++;
+  return ghostY;
+}
+
+function render() {
+  ctx.clearRect(0, 0, boardCanvas.width, boardCanvas.height);
+
+  // Grid lines
+  ctx.strokeStyle = 'rgba(255,255,255,0.035)';
+  ctx.lineWidth   = 0.5;
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      ctx.strokeRect(c * BS, r * BS, BS, BS);
+
+  // Locked blocks
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (board[r][c]) drawBlock(ctx, c, r, board[r][c], BS);
+
+  if (!gameRunning) return;
+
+  // Ghost piece
+  const ghostY = getGhostY();
+  if (ghostY !== current.y) {
+    for (let r = 0; r < current.shape.length; r++)
+      for (let c = 0; c < current.shape[r].length; c++)
+        if (current.shape[r][c])
+          drawBlock(ctx, current.x + c, ghostY + r, 'rgba(255,255,255,0.08)', BS);
+  }
+
+  // Active piece
+  for (let r = 0; r < current.shape.length; r++)
+    for (let c = 0; c < current.shape[r].length; c++)
+      if (current.shape[r][c])
+        drawBlock(ctx, current.x + c, current.y + r, current.color, BS);
+
+  // Pause overlay
+  if (gamePaused) {
+    ctx.fillStyle    = 'rgba(10,10,22,0.78)';
+    ctx.fillRect(0, 0, boardCanvas.width, boardCanvas.height);
+    ctx.fillStyle    = '#e0e0e0';
+    ctx.font         = `bold ${Math.max(14, BS * 0.75)}px Courier New`;
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('PAUSED', boardCanvas.width / 2, boardCanvas.height / 2);
+    ctx.textAlign    = 'left';
+    ctx.textBaseline = 'alphabetic';
+  }
+}
+
+function drawNext() {
+  const nextBS = parseInt(nextCanvas.dataset.bs) || 20;
+  nCtx.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
+  if (!next) return;
+  const ns = next.shape;
+  const ox = Math.floor((4 - ns[0].length) / 2);
+  const oy = Math.floor((4 - ns.length) / 2);
+  for (let r = 0; r < ns.length; r++)
+    for (let c = 0; c < ns[r].length; c++)
+      if (ns[r][c]) drawBlock(nCtx, ox + c, oy + r, next.color, nextBS);
+}
+
+// =============================================
+//  UI
+// =============================================
+function updateUI() {
+  scoreEl.textContent = score;
+  bestEl.textContent  = bestScore;
+  levelEl.textContent = level;
+  linesEl.textContent = lines;
+}
+
+// =============================================
+//  INIT GAME
+// =============================================
+function initGame() {
+  // Hitung ulang block size saat game dimulai/restart (handle resize)
+  BS = calcBlockSize();
+  applyCanvasSize();
+
+  createBoard();
+  score = 0; level = 1; lines = 0;
+  gamePaused   = false;
+  gameRunning  = true;
+  dropInterval = getDropInterval();
+  gameoverEl.style.display = 'none';
+
+  next    = randomPiece();
+  current = randomPiece();
+  updateUI();
+  drawNext();
+  startDropTimer();
+  render();
+}
+
+// =============================================
+//  SCREEN NAV
+// =============================================
+function showScreen(id) {
+  ['loading-screen','menu-screen','game-screen'].forEach(sid => {
+    document.getElementById(sid).style.display =
+      sid === id ? 'flex' : 'none';
+  });
+}
+
+document.getElementById('btn-menu-start').addEventListener('click', () => {
+  showScreen('game-screen');
+  initGame();
+});
+document.getElementById('btn-restart').addEventListener('click', () => initGame());
+
+// =============================================
+//  LOADING (5 detik)
+// =============================================
+(function runLoading() {
+  const tips = [
+    'Memuat tetromino...',
+    'Mempersiapkan grid 10×20...',
+    'Mengatur rotasi wall kick...',
+    'Menghitung line-clear bonus...',
+    'Siap bermain!'
+  ];
+  const bar    = document.getElementById('progress-bar');
+  const tipEl  = document.getElementById('loading-tip');
+  const TOTAL  = 5000;
+  const start  = Date.now();
+  let tipIdx   = 0;
+
+  const tipTimer = setInterval(() => {
+    tipIdx = Math.min(tipIdx + 1, tips.length - 1);
+    tipEl.textContent = tips[tipIdx];
+  }, 1000);
+
+  const barTimer = setInterval(() => {
+    const pct = Math.min((Date.now() - start) / TOTAL * 100, 100);
+    bar.style.width = pct + '%';
+    if (pct >= 100) {
+      clearInterval(barTimer);
+      clearInterval(tipTimer);
+      menuBestEl.textContent = parseInt(localStorage.getItem('tetris_best') || '0');
+      showScreen('menu-screen');
+    }
+  }, 50);
+})();
+</script>
+</body>
+</html>
